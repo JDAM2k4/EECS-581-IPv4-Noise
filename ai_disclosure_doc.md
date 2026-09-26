@@ -3,6 +3,7 @@ Model Used:
 Prompt: 
 Edits: 
 Why Edits were made (if any):
+Future Changes:
 
 I will use the above template for each prompt given to gen AI. I also intend to push the AI written code to Github, along with the associated prompt, before review.
 This is to make it clear what was written by AI and what was changed/corrected by me, but I understand that that might be tedious to look through, so I will also make notes here.
@@ -17,5 +18,6 @@ You are not allowed to use any libraries that do any string-to-number conversion
 
 Upon a success, the program should output the following `Extracted IPv4 address: A.B.C.D (decimal value: N, port: P)` where N is the 32-bit decimal value and P is the port number or the literal text none. Main should constantly prompt the user for another input string until the user types a case sensitive `END` which causes the program to print `Program Terminated` before the program closes.
 
-Edits: 
-Why Edits were made (if any):
+Edits: Began Commenting Code
+Why Edits were made (if any): For my understanding
+Future Changes: Add different prints for why something was not identified.
