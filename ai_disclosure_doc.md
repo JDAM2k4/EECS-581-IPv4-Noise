@@ -52,6 +52,5 @@ Why Edits were made (if any): because the AI did not follow the prompt correctly
 Date: 09.26.26
 Model Used: GPT 6 Luna
 Prompt: Rework the last prompt, as you did not print any of the error text to screen when given an invalid string.
-Edits: 
-Why Edits were made (if any):
-Future Changes: 
+Edits: N/A
+Why Edits were made (if any): Upon completing the test_cases.md file, I tested the program and found no errors.
