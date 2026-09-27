@@ -8,56 +8,88 @@ static int is_token_character(char character)
 // Check if a character is part of an IPv4 token
 {
 	return (character >= '0' && character <= '9') ||
-		   character == '.' || character == ':';
+		   (character >= 'A' && character <= 'Z') ||
+		   (character >= 'a' && character <= 'z') ||
+		   character == '.' || character == ':' || character == '-';
 }
 
-static int parse_number(const char *token, size_t token_length,
-						size_t *position, size_t max_digits,
-						unsigned int max_value, unsigned int *value)
+static int is_token_start_character(char character)
+{
+	return (character >= '0' && character <= '9') ||
+		   character == '.' || character == ':' || character == '-';
+}
+
+typedef enum {
+	PARSE_NO_MATCH,
+	PARSE_OK,
+	PARSE_OCTET_TOO_HIGH,
+	PARSE_PORT_TOO_HIGH,
+	PARSE_LEADING_ZERO,
+	PARSE_INVALID_PORT,
+	PARSE_NEGATIVE_OCTET,
+	PARSE_NEGATIVE_PORT
+} ParseResult;
+
+static ParseResult parse_number(const char *token, size_t token_length,
+								size_t *position, size_t max_digits,
+								unsigned int max_value, unsigned int *value,
+								int is_port)
 {
 	// Parse a number from the token
 	size_t start = *position; // Start position of the number
 	unsigned int parsed_value = 0; // Parsed value of the number
+	size_t digit_count = 0;
+
+	if (*position < token_length && token[*position] == '-') {
+		return is_port ? PARSE_NEGATIVE_PORT : PARSE_NEGATIVE_OCTET;
+	}
 
 	while (*position < token_length && // Check if the current position is within the token length
 		   token[*position] >= '0' && token[*position] <= '9') {
-		// Check if the current position is within the token length and is a digit
-		if (*position - start == max_digits) {
-			return 0;
-		}
-		parsed_value = parsed_value * 10 +
-					   (unsigned int)(token[*position] - '0'); // Parse the digit
-		if (parsed_value > max_value) { // Check if the parsed value exceeds the maximum allowed value
-			return 0; // Return 0 if the parsed value exceeds the maximum allowed value
+		digit_count++;
+		if (parsed_value <= max_value) {
+			parsed_value = parsed_value * 10 +
+						   (unsigned int)(token[*position] - '0');
+			if (parsed_value > max_value) {
+				parsed_value = max_value + 1;
+			}
 		}
 		(*position)++; // Move to the next character
 	}
 
-	if (*position == start ||
-		(*position - start > 1 && token[start] == '0')) {
-		// Check if the number is valid (no leading zeros unless it's just "0")
-		return 0;
+	if (*position == start) {
+		return is_port ? PARSE_INVALID_PORT : PARSE_NO_MATCH;
+	}
+	if (is_port && digit_count > max_digits) {
+		return PARSE_INVALID_PORT;
+	}
+	if (digit_count > 1 && token[start] == '0') {
+		return PARSE_LEADING_ZERO;
+	}
+	if (parsed_value > max_value) {
+		return is_port ? PARSE_PORT_TOO_HIGH : PARSE_OCTET_TOO_HIGH;
 	}
 
 	*value = parsed_value; // Store the parsed value
-	return 1;
+	return PARSE_OK;
 }
 
-static int parse_ipv4_token(const char *token, size_t token_length,
-							unsigned int octets[4], int *has_port,
-							unsigned int *port) // Parse an IPv4 token and extract its components
+static ParseResult parse_ipv4_token(const char *token, size_t token_length,
+									unsigned int octets[4], int *has_port,
+									unsigned int *port) // Parse an IPv4 token and extract its components
 {
 	size_t position = 0; // Current position in the token
 	size_t index; // Index for iterating through the octets
 
 	for (index = 0; index < 4; index++) { // Iterate through the four octets
-		if (!parse_number(token, token_length, &position, 3, 255,
-						  &octets[index])) { // If parsing the number fails
-			return 0; // Return 0 if parsing the number fails
+		ParseResult result = parse_number(token, token_length, &position, 3, 255,
+										  &octets[index], 0);
+		if (result != PARSE_OK) {
+			return result;
 		}
 		if (index < 3) { // If not the last octet
 			if (position >= token_length || token[position] != '.') { // If the current position is out of bounds or not a dot
-				return 0; // Return 0 if the octet is invalid
+				return PARSE_NO_MATCH;
 			}
 			position++; // Move to the next character
 		}
@@ -66,19 +98,45 @@ static int parse_ipv4_token(const char *token, size_t token_length,
 	*has_port = 0; // Initialize the port flag
 	if (position < token_length && token[position] == ':') { // If a colon is found (indicating a port number)
 		position++; // Move to the next character
-		if (!parse_number(token, token_length, &position, 5, 65535, port)) { // If parsing the port number fails
-			return 0; // Return 0 if parsing the port number fails
+		ParseResult result = parse_number(token, token_length, &position, 5, 65535,
+										  port, 1);
+		if (result != PARSE_OK) {
+			return result;
 		}
 		*has_port = 1; // Set the port flag
 	}
 
-	return position == token_length; // Return 1 if the entire token was parsed successfully, 0 otherwise
+	if (position != token_length) {
+		return *has_port ? PARSE_INVALID_PORT : PARSE_NO_MATCH;
+	}
+	return PARSE_OK;
+}
+
+static const char *parse_error_message(ParseResult result)
+{
+	switch (result) {
+	case PARSE_OCTET_TOO_HIGH:
+		return "Error: Octet had value higher than 255";
+	case PARSE_PORT_TOO_HIGH:
+		return "Error: port number must be less than 65535";
+	case PARSE_LEADING_ZERO:
+		return "Error: Leading Zeros are not permitted";
+	case PARSE_INVALID_PORT:
+		return "Error: invalid port number";
+	case PARSE_NEGATIVE_OCTET:
+		return "Error: Octet cannot be negative";
+	case PARSE_NEGATIVE_PORT:
+		return "Error: Port number should be positive";
+	default:
+		return "Error: no valid address found";
+	}
 }
 
 static void scan_line(const char *line) // Scan a line of input for IPv4 addresses
 {
 	size_t line_length = strlen(line); // Get the length of the line
 	size_t position = 0; // Position in the line
+	ParseResult first_error = PARSE_NO_MATCH;
 
 	while (position < line_length) { // Iterate through the line
 		size_t token_start; // Start position of the current token
@@ -86,8 +144,9 @@ static void scan_line(const char *line) // Scan a line of input for IPv4 address
 		unsigned int octets[4]; // Array to store the four octets of the IPv4 address
 		unsigned int port = 0; // Port number (if present)
 		int has_port; // Flag indicating whether a port number is present
+		ParseResult result;
 
-		while (position < line_length && !is_token_character(line[position])) { // Skip non-token characters
+		while (position < line_length && !is_token_start_character(line[position])) { // Skip non-token characters
 			position++; // Move to the next character
 		}
 		if (position == line_length) { // If the end of the line is reached
@@ -100,8 +159,9 @@ static void scan_line(const char *line) // Scan a line of input for IPv4 address
 		}
 		token_length = position - token_start; // Calculate the length of the current token
 
-		if (parse_ipv4_token(line + token_start, token_length, octets,
-							 &has_port, &port)) { // If the token is a valid IPv4 address
+		result = parse_ipv4_token(line + token_start, token_length, octets,
+							   &has_port, &port);
+		if (result == PARSE_OK) {
 			uint32_t decimal_value = 
 				((uint32_t)octets[0] << 24) |
 				((uint32_t)octets[1] << 16) |
@@ -119,9 +179,22 @@ static void scan_line(const char *line) // Scan a line of input for IPv4 address
 					   octets[0], octets[1], octets[2], octets[3],
 					   decimal_value); // Print the extracted IPv4 address without port
 			}
-			return; 
+			return;
+		}
+		if (result != PARSE_NO_MATCH && first_error == PARSE_NO_MATCH) {
+			size_t dot_count = 0;
+			size_t token_index;
+			for (token_index = 0; token_index < token_length; token_index++) {
+				if (line[token_start + token_index] == '.') {
+					dot_count++;
+				}
+			}
+			if (dot_count >= 3) {
+				first_error = result;
+			}
 		}
 	}
+	printf("%s\n", parse_error_message(first_error));
 }
 
 static char *read_line(void) // Read a line of input from the user

@@ -15,3 +15,6 @@ This will document the different test cases that the program will be tested with
 
 #5 IPv4 octets are made up of numerical values.  
     If given a string with only alphabetical or special characters the program should return the statement `Error: no valid address found`  
+
+#6 Octets should be positive numbers.  
+    If given a negative octet the error should be `Error: Octet cannot be negative`
