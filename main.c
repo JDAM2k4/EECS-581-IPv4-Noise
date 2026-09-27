@@ -136,7 +136,7 @@ static void scan_line(const char *line) // Scan a line of input for IPv4 address
 {
 	size_t line_length = strlen(line); // Get the length of the line
 	size_t position = 0; // Position in the line
-	ParseResult first_error = PARSE_NO_MATCH;
+	int reported_error = 0;
 
 	while (position < line_length) { // Iterate through the line
 		size_t token_start; // Start position of the current token
@@ -181,7 +181,7 @@ static void scan_line(const char *line) // Scan a line of input for IPv4 address
 			}
 			return;
 		}
-		if (result != PARSE_NO_MATCH && first_error == PARSE_NO_MATCH) {
+		if (result != PARSE_NO_MATCH) {
 			size_t dot_count = 0;
 			size_t token_index;
 			for (token_index = 0; token_index < token_length; token_index++) {
@@ -190,11 +190,14 @@ static void scan_line(const char *line) // Scan a line of input for IPv4 address
 				}
 			}
 			if (dot_count >= 3) {
-				first_error = result;
+				printf("%s\n", parse_error_message(result));
+				reported_error = 1;
 			}
 		}
 	}
-	printf("%s\n", parse_error_message(first_error));
+	if (!reported_error) {
+		printf("%s\n", parse_error_message(PARSE_NO_MATCH));
+	}
 }
 
 static char *read_line(void) // Read a line of input from the user

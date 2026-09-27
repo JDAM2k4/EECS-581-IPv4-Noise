@@ -44,8 +44,14 @@ Prompt: Please add the following checks and error codes, should the input string
 
 #6 Octets should be positive numbers.  
     If given a negative octet the error should be `Error: Octet cannot be negative`
+Edits: follow up prompt
+Why Edits were made (if any): because the AI did not follow the prompt correctly - more specification needed
+
+---
+
+Date: 09.26.26
+Model Used: GPT 6 Luna
+Prompt: Rework the last prompt, as you did not print any of the error text to screen when given an invalid string.
 Edits: 
 Why Edits were made (if any):
 Future Changes:
-
-
